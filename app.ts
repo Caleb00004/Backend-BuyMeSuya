@@ -8,6 +8,8 @@ import waitlistRoutes from "./routes/waitlistRoutes";
 
 dotenv.config();
 
+console.log("Mongo URI loaded:", process.env.MONGO_URI ? "yes" : "MISSING");
+
 // Allow localhost in dev, only your frontend URL in prod
 const allowedOrigins =
   process.env.NODE_ENV === "production"
@@ -36,7 +38,7 @@ app.set("trust proxy", 1);
     console.error('Error starting the server:', error);
     process.exit(1);
   }
-});
+})();
 
 // Use Morgan middleware (predefined format 'dev')
 app.use(morgan("dev"));
