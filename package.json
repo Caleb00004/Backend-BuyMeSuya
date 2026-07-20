@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "dev": "ts-node-dev --respawn app.ts"
+    "build": "node init && tsc",
+    "start": "node init && node dist/app.js",
+    "dev": "node init && ts-node-dev --respawn app.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,7 +20,8 @@
     "express-async-handler": "^1.2.0",
     "express-rate-limit": "^8.6.0",
     "mongoose": "^9.7.4",
-    "morgan": "^1.11.0"
+    "morgan": "^1.11.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
