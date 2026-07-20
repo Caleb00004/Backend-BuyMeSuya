@@ -13,7 +13,7 @@ console.log("Mongo URI loaded:", process.env.MONGO_URI ? "yes" : "MISSING");
 // Allow localhost in dev, only your frontend URL in prod
 const allowedOrigins =
   process.env.NODE_ENV === "production"
-    ? ["https://buy-me-suya.vercel.app/",] // ✅ production domain
+    ? ["https://buy-me-suya.vercel.app",] // ✅ production domain
     : ["http://localhost:3000", "http://localhost:3001"]; // ✅ dev frontend
 
 const app = express();
