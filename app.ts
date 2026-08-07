@@ -5,6 +5,10 @@ import connectDB from "./config/db";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
 import waitlistRoutes from "./routes/waitlistRoutes";
+import userRoutes from "./routes/userRoutes";
+import authRoutes from "./routes/authRoutes";
+import cookieParser from "cookie-parser";
+import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
 
@@ -16,13 +20,19 @@ const allowedOrigins =
     ? ["https://buy-me-suya.vercel.app",] // ✅ production domain
     : ["http://localhost:3000", "http://localhost:3001"]; // ✅ dev frontend
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 // Trust the first proxy hop so express-rate-limit sees the real client IP
 // (X-Forwarded-For) instead of the proxy's internal IP — without this, all
 // users share one IP and one spammer can block everyone.
 app.set("trust proxy", 1);
+
+cloudinary.config({
+  cloud_name: process.env.cloudinary_cloud_Name,
+  api_key: process.env.cloudinary_api_key,
+  api_secret: process.env.cloudinary_api_secret
+});
 
 (async () => {
   try {
@@ -59,6 +69,8 @@ app.use(cors({
 
 // Enable JSON parsing for incoming requests
 app.use(express.json());
+// parse cookies for auth tokens
+app.use(cookieParser());
 
 
 // Apply rate limiting to ALL requests (per real client IP — requires trust proxy above).
@@ -77,7 +89,9 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
-app.use("/api/waitlist", waitlistRoutes)
+app.use("/api/waitlist", waitlistRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/auth", authRoutes);
 
 app.get('/healthz', async (req, res) => {
   return res.sendStatus(200);

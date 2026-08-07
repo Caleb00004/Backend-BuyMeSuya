@@ -10,7 +10,7 @@
     "typeRoots": ["./types", "./node_modules/@types"],
     "strict": true,
     "skipLibCheck": true,
-    "types": ["node", "express"]
+    "types": ["node", "express", "multer"]
   },
   "include": ["./**/*.ts"],
   "exclude": ["node_modules", "dist"]
