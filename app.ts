@@ -4,10 +4,11 @@ import dotenv from "dotenv";
 import connectDB from "./config/db";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
-import waitlistRoutes from "./routes/waitlistRoutes";
+// import waitlistRoutes from "./routes/waitlistRoutes";
 import userRoutes from "./routes/userRoutes";
 import authRoutes from "./routes/authRoutes";
 import cookieParser from "cookie-parser";
+import otpRoutes from "./routes/otpRoutes";
 import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
@@ -89,9 +90,10 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
-app.use("/api/waitlist", waitlistRoutes);
+// app.use("/api/waitlist", waitlistRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/otp", otpRoutes);
 
 app.get('/healthz', async (req, res) => {
   return res.sendStatus(200);

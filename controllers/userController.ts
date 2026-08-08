@@ -3,6 +3,7 @@ import asyncHandler from "express-async-handler";
 import { QueryResult } from "pg";
 import { randomBytes, scryptSync } from "crypto";
 import { pool } from "../config/db";
+import { verifyOtp } from "./otpController";
 import Multer from "multer";
 import { uploadAvatarToCloudinary } from "../utils/uploadAvatarToCloudinary";
 import { hashPassword } from "../utils/password";
@@ -20,6 +21,7 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     username,
     email,
     password,
+    otp,
     display_name,
     bio,
     // avatar_url,
@@ -33,6 +35,18 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
 
   const normalizedUsername = trimString(username);
   const normalizedEmail = trimString(email)?.toLowerCase();
+
+  // Verify OTP before creating user
+  if (!req.body.otp) {
+    res.status(400).json({ success: false, message: "OTP is required" });
+    return;
+  }
+
+  const otpValid = await verifyOtp(String(normalizedEmail), String(req.body.otp));
+  if (!otpValid) {
+    res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+    return;
+  }
 
   if (!normalizedUsername) {
     res.status(400).json({ success: false, message: "Username is required." });

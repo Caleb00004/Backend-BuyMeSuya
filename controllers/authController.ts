@@ -7,8 +7,6 @@ import {verifyPassword} from "../utils/password";
 
 const hashToken = (token: string, salt: string) => scryptSync(token, salt, 64).toString("hex");
 
-
-
 export const login = asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body as { email?: string; password?: string };
 
