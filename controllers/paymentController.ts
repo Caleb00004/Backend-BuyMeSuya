@@ -6,7 +6,7 @@ import { initiateFlutterwavePayment } from "../services/flutterwave";
 
 /**
  * POST /support/initiate
- * body: { creator_id, amount, fan_email, fan_name?, fan_phone? }
+ * body: { creator_id, amount, fan_email, fan_name?, fan_phone?, notes? }
  *
  * Creates a pending "support" record and returns a Flutterwave
  * checkout link. The fan is redirected there to pay by card or
@@ -17,12 +17,13 @@ import { initiateFlutterwavePayment } from "../services/flutterwave";
  * once the webhook confirms it. Never trust the redirect alone.
  */
 export const initiateSupport = asyncHandler(async (req: Request, res: Response) => {
-  const { creator_id, amount, fan_email, fan_name, fan_phone } = req.body as {
+  const { creator_id, amount, fan_email, fan_name, fan_phone, notes } = req.body as {
     creator_id?: number;
     amount?: number;
     fan_email?: string;
     fan_name?: string;
     fan_phone?: string;
+    notes?: string;
   };
 
   if (!creator_id || !amount || amount <= 0) {
@@ -63,10 +64,10 @@ export const initiateSupport = asyncHandler(async (req: Request, res: Response) 
   // Record the pledge as pending BEFORE calling Flutterwave, so tx_ref
   // is always traceable even if the redirect never completes.
   const insertResult = await pool.query(
-    `INSERT INTO supports (tx_ref, creator_id, fan_email, amount, status, created_at)
-     VALUES ($1, $2, $3, $4, 'pending', NOW())
+    `INSERT INTO supports (tx_ref, creator_id, fan_email, fan_name, notes, amount, status, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())
      RETURNING id`,
-    [txRef, creator_id, fan_email, amount]
+    [txRef, creator_id, fan_email, fan_name, notes, amount]
   );
 
   let payment;
