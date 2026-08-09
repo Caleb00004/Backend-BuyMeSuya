@@ -7,6 +7,7 @@ import cors from "cors";
 // import waitlistRoutes from "./routes/waitlistRoutes";
 import userRoutes from "./routes/userRoutes";
 import authRoutes from "./routes/authRoutes";
+import bankRoutes from "./routes/bankRoutes";
 import cookieParser from "cookie-parser";
 import otpRoutes from "./routes/otpRoutes";
 import { v2 as cloudinary } from 'cloudinary';
@@ -94,6 +95,7 @@ app.get('/', (req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/otp", otpRoutes);
+app.use("/api/banks", bankRoutes)
 
 app.get('/healthz', async (req, res) => {
   return res.sendStatus(200);

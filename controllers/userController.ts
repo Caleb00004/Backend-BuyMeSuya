@@ -16,37 +16,12 @@ const parseUserId = (value: string | string[] | undefined): number => {
   return parseInt(idText, 10);
 };
 
+// verifies OTP and creates user.
 export const createUser = asyncHandler(async (req: Request, res: Response) => {
-  const {
-    username,
-    email,
-    password,
-    otp,
-    display_name,
-    bio,
-    // avatar_url,
-    bank_name,
-    bank_account_number,
-    bank_account_name,
-    subaccount_code,
-  } = req.body as Record<string, any>;
-
-  const avatarFile = req.file as Express.Multer.File | undefined;; // Assuming you're using multer for file uploads
+  const { username, email, password, otp } = req.body as Record<string, any>;
 
   const normalizedUsername = trimString(username);
   const normalizedEmail = trimString(email)?.toLowerCase();
-
-  // Verify OTP before creating user
-  if (!req.body.otp) {
-    res.status(400).json({ success: false, message: "OTP is required" });
-    return;
-  }
-
-  const otpValid = await verifyOtp(String(normalizedEmail), String(req.body.otp));
-  if (!otpValid) {
-    res.status(400).json({ success: false, message: "Invalid or expired OTP" });
-    return;
-  }
 
   if (!normalizedUsername) {
     res.status(400).json({ success: false, message: "Username is required." });
@@ -63,6 +38,17 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  if (!otp) {
+    res.status(400).json({ success: false, message: "OTP is required." });
+    return;
+  }
+
+  const otpValid = await verifyOtp(normalizedEmail, String(otp));
+  if (!otpValid) {
+    res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+    return;
+  }
+
   const existingUser: QueryResult = await pool.query(
     "SELECT id FROM users WHERE username = $1 OR email = $2",
     [normalizedUsername, normalizedEmail]
@@ -73,40 +59,15 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  if (!avatarFile) {
-    res.status(400).json({ success: false, message: "No image file provided" });
-    return;
-  }
-
   const passwordHash = hashPassword(password);
-  const avatar_url = await uploadAvatarToCloudinary(avatarFile, String(normalizedUsername));
-  
+
   const result = await pool.query(
-    `INSERT INTO users (
-      username,
-      email,
-      password_hash,
-      display_name,
-      bio,
-      avatar_url,
-      bank_name,
-      bank_account_number,
-      bank_account_name,
-      subaccount_code
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING id, username, email, display_name, bio, avatar_url, bank_name, bank_account_number, bank_account_name, subaccount_code, is_verified, created_at, updated_at`,
-    [
-      normalizedUsername,
-      normalizedEmail,
-      passwordHash,
-      trimString(display_name),
-      trimString(bio),
-      trimString(avatar_url),
-      trimString(bank_name),
-      trimString(bank_account_number),
-      trimString(bank_account_name),
-      trimString(subaccount_code),
-    ]
+    `INSERT INTO users (username, email, password_hash)
+     VALUES ($1, $2, $3)
+     RETURNING id, username, email, display_name, bio, avatar_url,
+       bank_name, bank_account_number, bank_account_name, subaccount_code,
+       is_verified, created_at, updated_at`,
+    [normalizedUsername, normalizedEmail, passwordHash]
   );
 
   const user = result.rows[0];
@@ -114,6 +75,23 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json({ success: true, user });
 });
 
+export const checkUsername = asyncHandler(async (req: Request, res: Response) => {
+  const { username } = req.body as { username?: string };
+
+  const normalized = trimString(username);
+  if (!normalized) {
+    res.status(400).json({ success: false, message: "Username is required" });
+    return;
+  }
+
+  const result: QueryResult = await pool.query("SELECT id FROM users WHERE username = $1", [normalized]);
+  const taken = (result.rowCount ?? 0) > 0;
+
+  res.json({ success: true, available: !taken });
+});
+
+// PUT
+// update display name and bio
 export const updateUserProfile = asyncHandler(async (req: Request, res: Response) => {
   const userId = parseUserId(req.params.id);
   if (Number.isNaN(userId) || userId <= 0) {
@@ -138,56 +116,6 @@ export const updateUserProfile = asyncHandler(async (req: Request, res: Response
 
   if (updates.length === 0) {
     res.status(400).json({ success: false, message: "Provide display_name or bio to update." });
-    return;
-  }
-
-  updates.push(`updated_at = NOW()`);
-  values.push(userId);
-
-  const result = await pool.query(
-    `UPDATE users SET ${updates.join(", ")} WHERE id = $${index} RETURNING id, username, email, display_name, bio, avatar_url, bank_name, bank_account_number, bank_account_name, subaccount_code, is_verified, created_at, updated_at`,
-    values
-  );
-
-  if ((result.rowCount ?? 0) === 0) {
-    res.status(404).json({ success: false, message: "User not found." });
-    return;
-  }
-
-  res.json({ success: true, user: result.rows[0] });
-});
-
-export const updateUserBankDetails = asyncHandler(async (req: Request, res: Response) => {
-  const userId = parseUserId(req.params.id);
-  if (Number.isNaN(userId) || userId <= 0) {
-    res.status(400).json({ success: false, message: "A valid user id is required." });
-    return;
-  }
-
-  const { bank_name, bank_account_number, bank_account_name, subaccount_code } = req.body as Record<string, any>;
-  const updates: string[] = [];
-  const values: any[] = [];
-  let index = 1;
-
-  if (bank_name !== undefined) {
-    updates.push(`bank_name = $${index++}`);
-    values.push(trimString(bank_name));
-  }
-  if (bank_account_number !== undefined) {
-    updates.push(`bank_account_number = $${index++}`);
-    values.push(trimString(bank_account_number));
-  }
-  if (bank_account_name !== undefined) {
-    updates.push(`bank_account_name = $${index++}`);
-    values.push(trimString(bank_account_name));
-  }
-  if (subaccount_code !== undefined) {
-    updates.push(`subaccount_code = $${index++}`);
-    values.push(trimString(subaccount_code));
-  }
-
-  if (updates.length === 0) {
-    res.status(400).json({ success: false, message: "Provide bank_name, bank_account_number, bank_account_name, or subaccount_code to update." });
     return;
   }
 
