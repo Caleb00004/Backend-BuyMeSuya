@@ -9,13 +9,13 @@ import { uploadAvatarToCloudinary } from "../../utils/uploadAvatarToCloudinary";
 import { hashPassword } from "../../utils/password";
 // ---------------------------------------------------------------------
 
-vi.mock("../../db/pool", () => ({
+vi.mock("../../config/db", () => ({
   pool: {
     query: vi.fn(),
   },
 }));
 
-vi.mock("../../services/cloudinary", () => ({
+vi.mock("../../utils/uploadAvatarToCloudinary", () => ({
   uploadAvatarToCloudinary: vi.fn(),
 }));
 

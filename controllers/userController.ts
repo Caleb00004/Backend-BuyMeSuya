@@ -7,6 +7,7 @@ import { verifyOtp } from "./otpController";
 import Multer from "multer";
 import { uploadAvatarToCloudinary } from "../utils/uploadAvatarToCloudinary";
 import { hashPassword } from "../utils/password";
+import { parsePagination, buildPaginationMeta } from "../utils/helpers";
 
 const trimString = (value?: string) => (typeof value === "string" ? value.trim() : undefined);
 
@@ -160,4 +161,173 @@ export const updateUserAvatar = asyncHandler(async (req: Request, res: Response)
   }
 
   res.json({ success: true, user: result.rows[0] });
+});
+
+
+// -------------------- Public profile --------------------
+ 
+/**
+ * GET /users/:username
+ * Public profile — safe, non-sensitive fields only, plus lightweight
+ * aggregate stats (supporter count, total raised) computed on the fly.
+ */
+export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
+  const rawUsername = req.params.username;
+  const username = trimString(Array.isArray(rawUsername) ? rawUsername[0] : rawUsername);
+ 
+  if (!username) {
+    res.status(400).json({ success: false, message: "Username is required." });
+    return;
+  }
+ 
+  const userResult: QueryResult = await pool.query(
+    `SELECT id, username, display_name, bio, avatar_url, is_verified, created_at
+     FROM users WHERE username = $1`,
+    [username]
+  );
+ 
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "User not found." });
+    return;
+  }
+ 
+  const user = userResult.rows[0];
+ 
+  const statsResult: QueryResult = await pool.query(
+    `SELECT
+       COUNT(*)::int AS supporter_count,
+       COALESCE(SUM(amount), 0)::numeric AS total_raised
+     FROM supports
+     WHERE creator_id = $1 AND status = 'successful'`,
+    [user.id]
+  );
+ 
+  const stats = statsResult.rows[0];
+ 
+  res.status(200).json({
+    success: true,
+    user: {
+      ...user,
+      supporter_count: stats.supporter_count,
+      total_raised: stats.total_raised,
+    },
+  });
+});
+ 
+// -------------------- Supporters list (paginated) --------------------
+ 
+/**
+ * GET /users/:username/supporters?page=1&limit=15
+ * Public, paginated list of successful supporters. fan_email is
+ * intentionally excluded — it's PII, not something a random visitor
+ * to the profile page should see.
+ */
+export const getUserSupporters = asyncHandler(async (req: Request, res: Response) => {
+  const rawUsername = req.params.username;
+  const username = trimString(Array.isArray(rawUsername) ? rawUsername[0] : rawUsername);
+ 
+  if (!username) {
+    res.status(400).json({ success: false, message: "Username is required." });
+    return;
+  }
+ 
+  const userResult: QueryResult = await pool.query(
+    "SELECT id FROM users WHERE username = $1",
+    [username]
+  );
+ 
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "User not found." });
+    return;
+  }
+ 
+  const creatorId = userResult.rows[0].id;
+  const { page, limit, offset } = parsePagination(req.query);
+ 
+  const countResult: QueryResult = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM supports WHERE creator_id = $1 AND status = 'successful'`,
+    [creatorId]
+  );
+  const total = countResult.rows[0].total;
+ 
+  const supportersResult: QueryResult = await pool.query(
+    `SELECT id, fan_name, notes, amount, created_at
+     FROM supports
+     WHERE creator_id = $1 AND status = 'successful'
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [creatorId, limit, offset]
+  );
+ 
+  res.status(200).json({
+    success: true,
+    supporters: supportersResult.rows.map((row) => ({
+      ...row,
+      fan_name: row.fan_name?.trim() || "Anonymous",
+    })),
+    pagination: buildPaginationMeta(page, limit, total),
+  });
+});
+ 
+// -------------------- Top supporters --------------------
+ 
+/**
+ * GET /users/:username/top-supporters?page=1&limit=15
+ * Supporters ranked by total amount given (aggregated across all
+ * their successful support transactions to this creator), paginated.
+ * Grouped by fan_email internally (the real identity key) but the
+ * email itself is never returned — only the display name + totals.
+ */
+export const getTopSupporters = asyncHandler(async (req: Request, res: Response) => {
+  const rawUsername = req.params.username;
+  const username = trimString(Array.isArray(rawUsername) ? rawUsername[0] : rawUsername);
+ 
+  if (!username) {
+    res.status(400).json({ success: false, message: "Username is required." });
+    return;
+  }
+ 
+  const userResult: QueryResult = await pool.query(
+    "SELECT id FROM users WHERE username = $1",
+    [username]
+  );
+ 
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "User not found." });
+    return;
+  }
+ 
+  const creatorId = userResult.rows[0].id;
+  const { page, limit, offset } = parsePagination(req.query);
+ 
+  const countResult: QueryResult = await pool.query(
+    `SELECT COUNT(DISTINCT fan_email)::int AS total
+     FROM supports
+     WHERE creator_id = $1 AND status = 'successful'`,
+    [creatorId]
+  );
+  const total = countResult.rows[0].total;
+ 
+  const topResult: QueryResult = await pool.query(
+    `SELECT
+       MAX(fan_name) AS fan_name,
+       SUM(amount)::numeric AS total_amount,
+       COUNT(*)::int AS support_count,
+       MAX(created_at) AS last_supported_at
+     FROM supports
+     WHERE creator_id = $1 AND status = 'successful'
+     GROUP BY fan_email
+     ORDER BY total_amount DESC
+     LIMIT $2 OFFSET $3`,
+    [creatorId, limit, offset]
+  );
+ 
+  res.status(200).json({
+    success: true,
+    top_supporters: topResult.rows.map((row) => ({
+      ...row,
+      fan_name: row.fan_name?.trim() || "Anonymous",
+    })),
+    pagination: buildPaginationMeta(page, limit, total),
+  });
 });
