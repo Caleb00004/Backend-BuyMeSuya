@@ -9,7 +9,7 @@ import {
 
 const router = Router();
 
-router.post("/banks/get", fetchBanks);
+router.get("/banks/get", fetchBanks);
 router.post("/banks/resolvename", resolveBankName);
 router.patch("/users/:id/bank/confirm", confirmBankDetails);
 router.post("/support/initiate", initiateSupport);

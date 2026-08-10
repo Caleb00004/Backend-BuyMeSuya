@@ -163,7 +163,6 @@ export const updateUserAvatar = asyncHandler(async (req: Request, res: Response)
   res.json({ success: true, user: result.rows[0] });
 });
 
-
 // -------------------- Public profile --------------------
  
 /**

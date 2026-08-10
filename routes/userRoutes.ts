@@ -4,6 +4,8 @@ import {
   updateUserProfile,
   updateUserAvatar,
   checkUsername,
+  getUserProfile,
+  getUserSupporters
 } from "../controllers/userController";
 import { auth } from "../middlewares/auth";
 
@@ -11,6 +13,8 @@ const userRoutes = Router();
 
 userRoutes.post("/", createUser);
 userRoutes.post("/check-username", checkUsername);
+userRoutes.get("/:username", getUserProfile);
+userRoutes.get("/:username/supporters", getUserSupporters);
 userRoutes.put("/:id/profile", auth, updateUserProfile);
 userRoutes.put("/:id/avatar", auth, updateUserAvatar);
 
