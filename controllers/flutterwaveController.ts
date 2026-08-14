@@ -315,8 +315,8 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
   }
 
   const event = req.body;
-  const transactionId = event?.data?.id;
-  const txRef = event?.data?.tx_ref;
+  const transactionId = event?.id;
+  const txRef = event?.txRef;
 
   if (!transactionId || !txRef) {
     // Acknowledge with 200 so Flutterwave doesn't keep retrying a
