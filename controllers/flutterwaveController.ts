@@ -2,6 +2,7 @@ import asyncHandler from "express-async-handler";
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { pool } from "../config/db";
+import { QueryResult } from "pg";
 import {
   createFlutterwaveSubaccount,
   initiateFlutterwavePayment,
@@ -129,7 +130,24 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
     });
     return;
   }
- 
+  
+  console.log("HERE!!!!!")
+  console.log(userId)
+
+  const userResult: QueryResult = await pool.query(
+    `SELECT id, username, email, display_name, bio, avatar_url, is_verified, created_at
+      FROM users WHERE id = $1`,
+    [userId]
+  );
+
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "User not found." });
+    return;
+  }
+
+  const user = userResult.rows[0];
+  console.log(user)
+  
   const verifiedAccountName: string = resolveJson.data.account_name;
  
   let subaccount;
@@ -139,8 +157,10 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
       accountNumber: account_number,
       businessName: verifiedAccountName,
       businessMobile: business_mobile,
+      businessEmail: user.email,
     });
   } catch (err) {
+    console.error(err)
     res.status(502).json({
       success: false,
       message: "Failed to set up payout account with Flutterwave.",

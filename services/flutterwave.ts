@@ -15,6 +15,7 @@ export interface CreateSubaccountParams {
   accountNumber: string;
   businessName: string; // use the RESOLVED account_name from /accounts/resolve, not user input
   businessMobile: string;
+  businessEmail: string;
   country?: string; // defaults to "NG"
   splitType?: "percentage" | "flat";
   splitValue?: number; // e.g. 0.92 for creator's 92% share
@@ -39,10 +40,11 @@ export async function createFlutterwaveSubaccount(
     accountBank,
     accountNumber,
     businessName,
+    businessEmail,
     businessMobile,
     country = "NG",
     splitType = "percentage",
-    splitValue = 0.92, // creator gets 92%, platform keeps 8%
+    splitValue = 0.08, //  platform keeps 8%, creator gets 92%
   } = params;
 
   const response = await fetch(`${FLW_BASE_URL}/subaccounts`, {
@@ -53,6 +55,7 @@ export async function createFlutterwaveSubaccount(
       account_number: accountNumber,
       business_name: businessName,
       business_mobile: businessMobile,
+      business_email: businessEmail,
       country,
       split_type: splitType,
       split_value: splitValue,

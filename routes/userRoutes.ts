@@ -5,14 +5,16 @@ import {
   updateUserAvatar,
   checkUsername,
   getUserProfile,
-  getUserSupporters
+  getUserSupporters,
+  getMyProfile,
 } from "../controllers/userController";
 import { auth } from "../middlewares/auth";
 
 const userRoutes = Router();
 
 userRoutes.post("/", createUser);
-userRoutes.post("/check-username", checkUsername);
+userRoutes.get("/me", auth, getMyProfile);
+userRoutes.get("/check-username/:username", checkUsername);
 userRoutes.get("/:username", getUserProfile);
 userRoutes.get("/:username/supporters", getUserSupporters);
 userRoutes.put("/:id/profile", auth, updateUserProfile);

@@ -24,7 +24,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     const user = result.rows[0];
     
     if (!verifyPassword(password, user.password_hash)) {
-        res.status(401).json({ success: false });
+        res.status(401).json({ message: "passwords don't match", success: false });
         return;
     }
 

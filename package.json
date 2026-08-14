@@ -8,7 +8,11 @@
     "test:ui": "vitest --ui",
     "build": "tsc",
     "start": "node dist/app.js",
-    "dev": "ts-node-dev --respawn app.ts"
+    "dev": "ts-node-dev --respawn app.ts",
+    "migrate": "node-pg-migrate",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +44,7 @@
     "@types/pg": "^8.20.4",
     "@types/supertest": "^7.2.1",
     "@vitest/ui": "^4.1.10",
+    "node-pg-migrate": "^9.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"
   }

@@ -77,7 +77,7 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const checkUsername = asyncHandler(async (req: Request, res: Response) => {
-  const { username } = req.body as { username?: string };
+  const { username } = req.params as { username?: string };
 
   const normalized = trimString(username);
   if (!normalized) {
@@ -168,7 +168,6 @@ export const updateUserAvatar = asyncHandler(async (req: Request, res: Response)
 /**
  * GET /users/:username
  * Public profile — safe, non-sensitive fields only, plus lightweight
- * aggregate stats (supporter count, total raised) computed on the fly.
  */
 export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
   const rawUsername = req.params.username;
@@ -192,17 +191,66 @@ export const getUserProfile = asyncHandler(async (req: Request, res: Response) =
  
   const user = userResult.rows[0];
  
+  // const statsResult: QueryResult = await pool.query(
+  //   `SELECT
+  //      COUNT(*)::int AS supporter_count,
+  //      COALESCE(SUM(amount), 0)::numeric AS total_raised
+  //    FROM supports
+  //    WHERE creator_id = $1 AND status = 'successful'`,
+  //   [user.id]
+  // );
+ 
+  // const stats = statsResult.rows[0];
+
+  res.status(200).json({
+    success: true,
+    user: {
+      ...user,
+      // supporter_count: stats.supporter_count,
+      // total_raised: stats.total_raised,
+    },
+  });
+});
+
+/*
+GET /users/:id/me
+ * Creator Dashboard 
+ * aggregate stats (supporter count, total raised) computed on the fly.
+*/
+export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const authenticatedUserId = (req as any).user.userId;
+
+  if (Number.isNaN(authenticatedUserId) || authenticatedUserId <= 0) {
+    res.status(400).json({ success: false, message: "A valid user id is required." });
+    return;
+  }
+
+  const userResult: QueryResult = await pool.query(
+    `SELECT id, username, email, display_name, bio, avatar_url,
+      bank_name, bank_account_number, bank_account_name, subaccount_code,
+      is_verified, created_at, updated_at
+     FROM users WHERE id = $1`,
+    [authenticatedUserId]
+  );
+
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "User not found." });
+    return;
+  }
+
+  const user = userResult.rows[0];
+
   const statsResult: QueryResult = await pool.query(
     `SELECT
        COUNT(*)::int AS supporter_count,
        COALESCE(SUM(amount), 0)::numeric AS total_raised
      FROM supports
      WHERE creator_id = $1 AND status = 'successful'`,
-    [user.id]
+    [authenticatedUserId]
   );
- 
+
   const stats = statsResult.rows[0];
- 
+
   res.status(200).json({
     success: true,
     user: {

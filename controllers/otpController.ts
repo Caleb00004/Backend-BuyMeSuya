@@ -6,7 +6,8 @@ import sendOtpEmail from "../utils/send_email";
 
 const hash = (value: string, salt: string) => scryptSync(value, salt, 64).toString("hex");
 
-const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+// const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generateCode = () => Math.floor(10000 + Math.random() * 90000).toString();
 
 export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.body as { email?: string };
