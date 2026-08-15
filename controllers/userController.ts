@@ -100,7 +100,15 @@ export const updateUserProfile = asyncHandler(async (req: Request, res: Response
     return;
   }
 
-  const { display_name, bio } = req.body as Record<string, any>;
+  const {
+    display_name,
+    bio,
+    twitter_url,
+    instagram_url,
+    facebook_url,
+    tiktok_url,
+    youtube_url,
+  } = req.body as Record<string, any>;
   const updates: string[] = [];
   const values: any[] = [];
   let index = 1;
@@ -115,8 +123,25 @@ export const updateUserProfile = asyncHandler(async (req: Request, res: Response
     values.push(trimString(bio));
   }
 
+  const socialFields = [
+    [twitter_url, "twitter_url"],
+    [instagram_url, "instagram_url"],
+    [facebook_url, "facebook_url"],
+    [tiktok_url, "tiktok_url"],
+    [youtube_url, "youtube_url"],
+  ] as const;
+
+  for (const [value, column] of socialFields) {
+    if (value !== undefined) {
+      // empty string clears the link — trimString turns "" into undefined,
+      // so an explicit empty string still resolves to NULL in the DB
+      updates.push(`${column} = $${index++}`);
+      values.push(trimString(value) ?? null);
+    }
+  }
+
   if (updates.length === 0) {
-    res.status(400).json({ success: false, message: "Provide display_name or bio to update." });
+    res.status(400).json({ success: false, message: "Provide at least one field to update.", });
     return;
   }
 
@@ -124,7 +149,11 @@ export const updateUserProfile = asyncHandler(async (req: Request, res: Response
   values.push(userId);
 
   const result = await pool.query(
-    `UPDATE users SET ${updates.join(", ")} WHERE id = $${index} RETURNING id, username, email, display_name, bio, avatar_url, bank_name, bank_account_number, bank_account_name, subaccount_code, is_verified, created_at, updated_at`,
+    `UPDATE users SET ${updates.join(", ")} WHERE id = $${index}
+     RETURNING id, username, email, display_name, bio, avatar_url,
+       bank_name, bank_account_number, bank_account_name, subaccount_code,
+       twitter_url, instagram_url, facebook_url, tiktok_url, youtube_url,
+       is_verified, created_at, updated_at`,
     values
   );
 
@@ -178,8 +207,10 @@ export const getUserProfile = asyncHandler(async (req: Request, res: Response) =
     return;
   }
  
-  const userResult: QueryResult = await pool.query(
-    `SELECT id, username, display_name, bio, avatar_url, is_verified, created_at
+   const userResult: QueryResult = await pool.query(
+    `SELECT id, username, display_name, bio, avatar_url,
+      twitter_url, instagram_url, facebook_url, tiktok_url, youtube_url,
+      is_verified, created_at
      FROM users WHERE username = $1`,
     [username]
   );
@@ -228,8 +259,9 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
   const userResult: QueryResult = await pool.query(
     `SELECT id, username, email, display_name, bio, avatar_url,
       bank_name, bank_account_number, bank_account_name, subaccount_code,
+      twitter_url, instagram_url, facebook_url, tiktok_url, youtube_url,
       is_verified, created_at, updated_at
-     FROM users WHERE id = $1`,
+      FROM users WHERE id = $1`,
     [authenticatedUserId]
   );
 
@@ -242,10 +274,10 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
 
   const statsResult: QueryResult = await pool.query(
     `SELECT
-       COUNT(*)::int AS supporter_count,
-       COALESCE(SUM(amount), 0)::numeric AS total_raised
-     FROM supports
-     WHERE creator_id = $1 AND status = 'successful'`,
+        COUNT(*)::int AS supporter_count,
+        COALESCE(SUM(amount), 0)::numeric AS total_raised
+      FROM supports
+      WHERE creator_id = $1 AND status = 'successful'`,
     [authenticatedUserId]
   );
 
@@ -270,49 +302,41 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
  * to the profile page should see.
  */
 export const getUserSupporters = asyncHandler(async (req: Request, res: Response) => {
-  const rawUsername = req.params.username;
+ const rawUsername = req.params.username;
   const username = trimString(Array.isArray(rawUsername) ? rawUsername[0] : rawUsername);
- 
+
   if (!username) {
     res.status(400).json({ success: false, message: "Username is required." });
     return;
   }
- 
+
   const userResult: QueryResult = await pool.query(
     "SELECT id FROM users WHERE username = $1",
     [username]
   );
- 
+
   if ((userResult.rowCount ?? 0) === 0) {
     res.status(404).json({ success: false, message: "User not found." });
     return;
   }
- 
+
   const creatorId = userResult.rows[0].id;
-  const { page, limit, offset } = parsePagination(req.query);
- 
-  const countResult: QueryResult = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM supports WHERE creator_id = $1 AND status = 'successful'`,
-    [creatorId]
-  );
-  const total = countResult.rows[0].total;
- 
+
   const supportersResult: QueryResult = await pool.query(
     `SELECT id, fan_name, notes, amount, created_at
      FROM supports
      WHERE creator_id = $1 AND status = 'successful'
      ORDER BY created_at DESC
-     LIMIT $2 OFFSET $3`,
-    [creatorId, limit, offset]
+     LIMIT 10`,
+    [creatorId]
   );
- 
+
   res.status(200).json({
     success: true,
     supporters: supportersResult.rows.map((row) => ({
       ...row,
       fan_name: row.fan_name?.trim() || "Anonymous",
     })),
-    pagination: buildPaginationMeta(page, limit, total),
   });
 });
  

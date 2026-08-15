@@ -97,16 +97,17 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
     return;
   }
  
-  const { bank_code, account_number, business_mobile } = req.body as {
+  const { bank_code, account_number, business_mobile, bank_name } = req.body as {
+    bank_name?: string;
     bank_code?: string;
     account_number?: string;
     business_mobile?: string;
   };
  
-  if (!bank_code || !account_number || !business_mobile) {
+  if (!bank_code || !account_number || !business_mobile || !bank_name) {
     res.status(400).json({
       success: false,
-      message: "bank_code, account_number, and business_mobile are required.",
+      message: "bank_code, account_number, bank_name and business_mobile are required.",
     });
     return;
   }
@@ -171,15 +172,16 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
   const result = await pool.query(
     `UPDATE users SET
       bank_name = $1,
-      bank_account_number = $2,
-      bank_account_name = $3,
-      subaccount_code = $4,
+      bank_code = $2,
+      bank_account_number = $3,
+      bank_account_name = $4,
+      subaccount_code = $5,
       updated_at = NOW()
-    WHERE id = $5
+    WHERE id = $6
     RETURNING id, username, email, display_name, bio, avatar_url,
-      bank_name, bank_account_number, bank_account_name, subaccount_code,
+      bank_name, bank_code, bank_account_number, bank_account_name, subaccount_code,
       is_verified, created_at, updated_at`,
-    [bank_code, account_number, verifiedAccountName, subaccount.subaccountId, userId]
+    [bank_name, bank_code, account_number, verifiedAccountName, subaccount.subaccountId, userId]
   );
  
   if ((result.rowCount ?? 0) === 0) {
