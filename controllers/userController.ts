@@ -5,9 +5,11 @@ import { randomBytes, scryptSync } from "crypto";
 import { pool } from "../config/db";
 import { verifyOtp } from "./otpController";
 import Multer from "multer";
+import jwt from "jsonwebtoken";
 import { uploadAvatarToCloudinary } from "../utils/uploadAvatarToCloudinary";
 import { hashPassword } from "../utils/password";
 import { parsePagination, buildPaginationMeta } from "../utils/helpers";
+import { hashToken } from "./authController";
 
 const trimString = (value?: string) => (typeof value === "string" ? value.trim() : undefined);
 
@@ -72,6 +74,33 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
   );
 
   const user = result.rows[0];
+
+  const accessToken = jwt.sign({ userId: user.id }, process.env.ACCESS_SECRET as string, { expiresIn: "15m" });
+
+  // // add a small random id to each refresh token so multiple devices can coexist
+  // const refreshToken = jwt.sign({ userId: user.id, rid: randomBytes(8).toString("hex") }, process.env.REFRESH_SECRET as string, { expiresIn: "30d" });
+
+  // const salt = randomBytes(16).toString("hex");
+  // const tokenHash = hashToken(refreshToken, salt);
+
+  // await pool.query(
+  //     "INSERT INTO refresh_tokens (user_id, token_hash, salt) VALUES ($1, $2, $3)",
+  //     [user.id, tokenHash, salt]
+  // );
+
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 15 * 60 * 1000,
+  });
+
+  // res.cookie("refreshToken", refreshToken, {
+  //   httpOnly: true,
+  //   secure: process.env.NODE_ENV === "production",
+  //   sameSite: "lax",
+  //   maxAge: 30 * 24 * 60 * 60 * 1000,
+  // });
 
   res.status(201).json({ success: true, user });
 });
@@ -258,7 +287,7 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
 
   const userResult: QueryResult = await pool.query(
     `SELECT id, username, email, display_name, bio, avatar_url,
-      bank_name, bank_account_number, bank_account_name, subaccount_code,
+      bank_name, bank_account_number, bank_code, bank_account_name, subaccount_code,
       twitter_url, instagram_url, facebook_url, tiktok_url, youtube_url,
       is_verified, created_at, updated_at
       FROM users WHERE id = $1`,

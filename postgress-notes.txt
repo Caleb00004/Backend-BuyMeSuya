@@ -1,0 +1,61 @@
+to update table fields
+
+need node-pg-migrate installed
+
+npm i node-pg-migrate
+
+add to package.json scripts
+
+{
+    "migrate": "node-pg-migrate",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create"
+}
+
+create migration script with 
+
+npm run migrate:create -- `script-name`
+ i.e
+npm run migrate:create -- add-social-links-to-users
+
+file will be created
+
+// migrations/..._add-social-links-to-users.js
+exports.up = (pgm) => {
+};
+
+exports.down = (pgm) => {
+};
+
+write columns you want to add by referecing the table name
+i.e to update a users table with social media links
+
+// migrations/..._add-social-links-to-users.js
+exports.up = (pgm) => {
+  pgm.addColumns("users", {
+    twitter_url: { type: "varchar(255)" },
+    instagram_url: { type: "varchar(255)" },
+    facebook_url: { type: "varchar(255)" },
+    tiktok_url: { type: "varchar(255)" },
+    youtube_url: { type: "varchar(255)" },
+  });
+};
+
+exports.down = (pgm) => {
+  pgm.dropColumns("users", [
+    "twitter_url",
+    "instagram_url",
+    "facebook_url",
+    "tiktok_url",
+    "youtube_url",
+  ]);
+};
+
+Then run this to apply updates
+
+npm run migrate:up
+
+to undo it
+
+npm run migrate:down
