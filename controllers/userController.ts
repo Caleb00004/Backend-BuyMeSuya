@@ -368,6 +368,64 @@ export const getUserSupporters = asyncHandler(async (req: Request, res: Response
     })),
   });
 });
+
+/**
+ * GET /support/me?page=1&status=successful
+ * Private — authenticated creator's OWN supports, all statuses
+ * (pending, successful, failed, init_failed). Includes fan_email,
+ * since only the creator viewing their own dashboard sees this —
+ * unlike the public getUserSupporters endpoint, which deliberately
+ * excludes it.
+ */
+export const getMySupports = asyncHandler(async (req: Request, res: Response) => {
+  const creatorId = (req as any).user.userId;
+
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = 50;
+  const offset = (page - 1) * limit;
+
+  // Optional status filter — validated against the known set so an
+  // arbitrary/garbage value can't be used to build a broken query
+  const allowedStatuses = ["successful", "failed"];
+  const statusFilter =
+    typeof req.query.status === "string" && allowedStatuses.includes(req.query.status)
+      ? req.query.status
+      : undefined;
+
+  const whereClause = statusFilter
+    ? "WHERE creator_id = $1 AND status = $2"
+    : "WHERE creator_id = $1 AND status IN ('successful', 'failed')";
+  const queryParams = statusFilter ? [creatorId, statusFilter] : [creatorId];
+
+  const countResult: QueryResult = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM supports ${whereClause}`,
+    queryParams
+  );
+  const total = countResult.rows[0].total;
+
+  const supportsResult: QueryResult = await pool.query(
+    `SELECT id, tx_ref, fan_name, fan_email, notes, amount, status, created_at, updated_at
+     FROM supports
+     ${whereClause}
+     ORDER BY created_at DESC
+     LIMIT ${statusFilter ? "$3" : "$2"} OFFSET ${statusFilter ? "$4" : "$3"}`,
+    [...queryParams, limit, offset]
+  );
+
+  res.status(200).json({
+    success: true,
+    supports: supportsResult.rows.map((row) => ({
+      ...row,
+      fan_name: row.fan_name?.trim() || "Anonymous",
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+});
  
 // -------------------- Top supporters --------------------
  

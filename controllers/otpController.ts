@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import { randomBytes, scryptSync } from "crypto";
 import { pool } from "../config/db";
-import sendOtpEmail from "../utils/send_email";
+import { sendOtpEmail } from "../utils/send_email";
+// import sendOtpEmail from "../utils/send_email";
 
 const hash = (value: string, salt: string) => scryptSync(value, salt, 64).toString("hex");
 

@@ -6,8 +6,10 @@ import { QueryResult } from "pg";
 import {
   createFlutterwaveSubaccount,
   initiateFlutterwavePayment,
+  updateFlutterwaveSubaccount,
   verifyFlutterwaveTransaction,
 } from "../services/flutterwave";
+import { sendBankDetailsUpdatedEmail, sendTipNotificationEmail } from "../utils/send_email";
 
 export const fetchBanks = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -131,12 +133,9 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
     });
     return;
   }
-  
-  console.log("HERE!!!!!")
-  console.log(userId)
 
   const userResult: QueryResult = await pool.query(
-    `SELECT id, username, email, display_name, bio, avatar_url, is_verified, created_at
+    `SELECT id, username, email, display_name, bio, avatar_url, is_verified, subaccount_code, created_at
       FROM users WHERE id = $1`,
     [userId]
   );
@@ -147,19 +146,28 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
   }
 
   const user = userResult.rows[0];
-  console.log(user)
-  
   const verifiedAccountName: string = resolveJson.data.account_name;
+  const existingSubaccountCode = userResult.rows[0]?.subaccount_code;
  
   let subaccount;
   try {
-    subaccount = await createFlutterwaveSubaccount({
-      accountBank: bank_code,
-      accountNumber: account_number,
-      businessName: verifiedAccountName,
-      businessMobile: business_mobile,
-      businessEmail: user.email,
-    });
+     if (existingSubaccountCode) {
+      subaccount = await updateFlutterwaveSubaccount(existingSubaccountCode, {
+        accountBank: bank_code,
+        accountNumber: account_number,
+        businessName: verifiedAccountName,
+        businessMobile: business_mobile,
+        businessEmail: user.email
+      });
+    } else {
+      subaccount = await createFlutterwaveSubaccount({
+        accountBank: bank_code,
+        accountNumber: account_number,
+        businessName: verifiedAccountName,
+        businessMobile: business_mobile,
+        businessEmail: user.email,
+      });
+    }
   } catch (err) {
     console.error(err)
     res.status(502).json({
@@ -187,6 +195,21 @@ export const confirmBankDetails = asyncHandler(async (req: Request, res: Respons
   if ((result.rowCount ?? 0) === 0) {
     res.status(404).json({ success: false, message: "User not found." });
     return;
+  }
+
+  const updatedUser = result.rows[0];
+
+  // Send a security notification — isolate this so an email failure
+  // never breaks the actual bank-update response
+  try {
+    await sendBankDetailsUpdatedEmail(
+      updatedUser.email,
+      updatedUser.display_name || updatedUser.username,
+      verifiedAccountName,
+      bank_code
+    );
+  } catch (err) {
+    console.error("Failed to send bank details update notification:", err);
   }
  
   res.status(200).json({ success: true, user: result.rows[0] });
@@ -379,6 +402,29 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
   // TODO: trigger a notification to the creator here (email/push), and
   // any other post-payment side effects (e.g. updating a "total raised"
   // counter on the creator's profile).
+  // Fetch creator's email/name for the notification
+  const creatorResult = await pool.query(
+    "SELECT email, display_name, username FROM users WHERE id = $1",
+    [supportRecord.creator_id]
+  );
+  const creator = creatorResult.rows[0];
+
+  if (creator) {
+    try {
+      await sendTipNotificationEmail(
+        creator.email,
+        creator.display_name || creator.username,
+        supportRecord.fan_name,
+        Number(supportRecord.amount),
+        supportRecord.notes
+      );
+    } catch (err) {
+      // Don't let a failed email break the webhook response — Flutterwave
+      // will retry the webhook if you don't return 200, and you don't want
+      // an email provider hiccup to cause duplicate processing attempts
+      console.error("Failed to send tip notification email:", err);
+    }
+  }
 
   res.status(200).json({ received: true, processed: true, result: "successful" });
 });

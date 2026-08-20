@@ -69,6 +69,39 @@ export async function createFlutterwaveSubaccount(
   }
 
   return {
+    subaccountId: json.data.subaccount_id,
+    accountNumber: json.data.account_number,
+    bankCode: json.data.account_bank,
+    raw: json.data,
+  };
+}
+
+export async function updateFlutterwaveSubaccount(
+  subaccountId: string,
+  params: Omit<CreateSubaccountParams, "splitType" | "splitValue">
+): Promise<FlutterwaveSubaccountResult> {
+  const { accountBank, accountNumber, businessName, businessEmail, businessMobile, country = "NG" } = params;
+
+  const response = await fetch(`${FLW_BASE_URL}/subaccounts/${subaccountId}`, {
+    method: "PUT",
+    headers: flwHeaders(),
+    body: JSON.stringify({
+      account_bank: accountBank,
+      account_number: accountNumber,
+      business_name: businessName,
+      business_mobile: businessMobile,
+      business_email: businessEmail,
+      country,
+    }),
+  });
+
+  const json = await response.json();
+
+  if (!response.ok || json.status !== "success") {
+    throw new Error(json.message ?? "Failed to update Flutterwave subaccount");
+  }
+
+  return {
     subaccountId: json.data.id ?? json.data.subaccount_id,
     accountNumber: json.data.account_number,
     bankCode: json.data.account_bank,
