@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { login, refreshToken, logout, resetPassword, requestPasswordReset } from "../controllers/authController";
-import rateLimit from "express-rate-limit";
+import rateLimit, {ipKeyGenerator} from "express-rate-limit";
 
 const forgotPasswordLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 3,
-  keyGenerator: (req) => (req.body && req.body.email) || req.ip,
+  keyGenerator: (req) => (req.body && req.body.email) || (req.ip && ipKeyGenerator(req.ip)),
   handler: (req, res) => res.status(429).json({ success: false, message: "Too many requests" }),
 });
 
