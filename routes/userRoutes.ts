@@ -5,9 +5,7 @@ import {
   updateUserAvatar,
   checkUsername,
   getUserProfile,
-  getUserSupporters,
   getMyProfile,
-  getMySupports
 } from "../controllers/userController";
 import { auth } from "../middlewares/auth";
 
@@ -17,8 +15,6 @@ userRoutes.post("/", createUser);
 userRoutes.get("/me", auth, getMyProfile);
 userRoutes.get("/check-username/:username", checkUsername);
 userRoutes.get("/:username", getUserProfile);
-userRoutes.get("/:username/supporters", getUserSupporters);
-userRoutes.get("/support/me", auth, getMySupports);
 userRoutes.put("/:id/profile", auth, updateUserProfile);
 userRoutes.put("/:id/avatar", auth, updateUserAvatar);
 

@@ -287,7 +287,7 @@ export const initiateSupport = asyncHandler(async (req: Request, res: Response) 
     payment = await initiateFlutterwavePayment({
       txRef,
       amount,
-      redirectUrl: `${process.env.APP_BASE_URL}/support/callback`,
+      redirectUrl: `${process.env.APP_BASE_URL}/${creator.username}`,
       customerEmail: fan_email,
       customerName: fan_name,
       customerPhone: fan_phone,
