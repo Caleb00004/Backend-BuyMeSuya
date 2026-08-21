@@ -3,7 +3,8 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { pool } from "../config/db";
-import {verifyPassword} from "../utils/password";
+import {hashPassword, verifyPassword} from "../utils/password";
+import { sendPasswordResetEmail } from "../utils/send_email";
 
 export const hashToken = (token: string, salt: string) => scryptSync(token, salt, 64).toString("hex");
 
@@ -145,4 +146,131 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     });
 
     res.sendStatus(200);
+});
+
+// controllers/authController.ts (add alongside login/refreshToken/logout)
+
+export const requestPasswordReset = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body as { email?: string };
+
+  if (!email) {
+    res.status(400).json({ success: false, message: "Email is required." });
+    return;
+  }
+
+  const userResult = await pool.query("SELECT id, username, email FROM users WHERE email = $1", [
+    email.trim().toLowerCase(),
+  ]);
+
+  // IMPORTANT: always return the same success response whether or not the
+  // email exists. This prevents someone from using this endpoint to probe
+  // which emails are registered on the platform (a real enumeration risk).
+  if ((userResult.rowCount ?? 0) === 0) {
+    res.json({
+      success: true,
+      message: "If an account exists with that email, a reset link has been sent.",
+    });
+    return;
+  }
+
+  const user = userResult.rows[0];
+
+  const rawToken = randomBytes(32).toString("hex"); // sent to the user, never stored raw
+  const salt = randomBytes(16).toString("hex");
+  const tokenHash = hashToken(rawToken, salt);
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+  // Invalidate any previous outstanding reset requests for this user first
+  await pool.query("DELETE FROM password_resets WHERE user_id = $1", [user.id]);
+
+  await pool.query(
+    `INSERT INTO password_resets (user_id, token_hash, salt, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [user.id, tokenHash, salt, expiresAt]
+  );
+
+  const resetLink = `${process.env.APP_BASE_URL}/reset-password?token=${rawToken}&uid=${user.id}`;
+
+  try {
+    await sendPasswordResetEmail(user.email, user.username, resetLink);
+  } catch (err) {
+    console.error("Failed to send password reset email:", err);
+    // Still return success — don't reveal internal failures to the client,
+    // and don't leak whether the email genuinely exists via error branching
+  }
+
+  res.json({
+    success: true,
+    message: "If an account exists with that email, a reset link has been sent.",
+  });
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { uid, token, newPassword } = req.body as {
+    uid?: string;
+    token?: string;
+    newPassword?: string;
+  };
+
+  if (!uid || !token || !newPassword) {
+    res.status(400).json({ success: false, message: "Missing required fields." });
+    return;
+  }
+
+  if (newPassword.length < 8) {
+    res.status(400).json({ success: false, message: "Password must be at least 8 characters." });
+    return;
+  }
+
+  const userId = Number(uid);
+  if (Number.isNaN(userId) || userId <= 0) {
+    res.status(400).json({ success: false, message: "Invalid reset link." });
+    return;
+  }
+
+  const resetResult = await pool.query(
+    `SELECT id, token_hash, salt, expires_at, used
+     FROM password_resets WHERE user_id = $1`,
+    [userId]
+  );
+
+  if ((resetResult.rowCount ?? 0) === 0) {
+    res.status(400).json({ success: false, message: "Invalid or expired reset link." });
+    return;
+  }
+
+  const resetRow = resetResult.rows[0];
+
+  if (resetRow.used) {
+    res.status(400).json({ success: false, message: "This reset link has already been used." });
+    return;
+  }
+
+  if (new Date(resetRow.expires_at) < new Date()) {
+    res.status(400).json({ success: false, message: "This reset link has expired." });
+    return;
+  }
+
+  const candidateHash = hashToken(token, resetRow.salt);
+  if (candidateHash !== resetRow.token_hash) {
+    res.status(400).json({ success: false, message: "Invalid or expired reset link." });
+    return;
+  }
+
+  const newPasswordHash = hashPassword(newPassword);
+
+  await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [
+    newPasswordHash,
+    userId,
+  ]);
+
+  // Mark this reset token as used so it can never be replayed
+  await pool.query("UPDATE password_resets SET used = true WHERE id = $1", [resetRow.id]);
+
+  // Security-critical: invalidate ALL existing sessions. If someone reset
+  // the password because the account was compromised, any refresh tokens
+  // an attacker holds must stop working immediately.
+  await pool.query("DELETE FROM refresh_tokens WHERE user_id = $1", [userId]);
+
+  res.json({ success: true, message: "Password reset successfully. Please log in again." });
 });

@@ -84,4 +84,21 @@ async function sendBankDetailsUpdatedEmail(
   });
 }
 
-export {sendOtpEmail, sendTipNotificationEmail, sendBankDetailsUpdatedEmail};
+async function sendPasswordResetEmail(
+  to: string,
+  username: string,
+  resetLink: string
+): Promise<void> {
+  await sendEmail({
+    to,
+    subject: "Reset your BuyMeSuya password",
+    html: `
+      <p>Hey ${username},</p>
+      <p>We received a request to reset your password. Click the link below to set a new one:</p>
+      <p><a href="${resetLink}">${resetLink}</a></p>
+      <p>This link expires in 30 minutes. If you didn't request this, you can safely ignore this email.</p>
+    `,
+  });
+}
+
+export {sendOtpEmail, sendTipNotificationEmail, sendPasswordResetEmail, sendBankDetailsUpdatedEmail};
