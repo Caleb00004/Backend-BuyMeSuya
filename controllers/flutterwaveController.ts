@@ -344,9 +344,8 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
   console.log("[webhook] Signature verified OK");
 
   const event = req.body;
-  const transactionId = event?.id;
-  const txRef = event?.txRef;
-
+  const transactionId = event?.data?.id;
+  const txRef = event?.data?.tx_ref;
   console.log("[webhook] Payload parsed — transactionId:", transactionId, "txRef:", txRef);
 
   if (!transactionId || !txRef) {
