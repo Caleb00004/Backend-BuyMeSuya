@@ -331,61 +331,96 @@ export const initiateSupport = asyncHandler(async (req: Request, res: Response) 
  * we check current status before updating.
  */
 export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: Response) => {
+  console.log("[webhook] Incoming request received");
+
   const signature = req.headers["verif-hash"];
 
   if (!signature || signature !== process.env.FLW_WEBHOOK_SECRET_HASH) {
-    // Don't leak details about why — just reject.
+    console.error("[webhook] Signature mismatch — rejecting. Received:", signature);
     res.status(401).end();
     return;
   }
+
+  console.log("[webhook] Signature verified OK");
 
   const event = req.body;
   const transactionId = event?.id;
   const txRef = event?.txRef;
 
+  console.log("[webhook] Payload parsed — transactionId:", transactionId, "txRef:", txRef);
+
   if (!transactionId || !txRef) {
-    // Acknowledge with 200 so Flutterwave doesn't keep retrying a
-    // malformed payload forever, but don't process anything.
+    console.error("[webhook] Malformed payload — missing transactionId or txRef. Raw body:", JSON.stringify(event));
     res.status(200).json({ received: true, processed: false });
     return;
   }
 
-  // Look up our own pending record first — if we don't recognize this
-  // tx_ref at all, there's nothing to do (could be a stale/replayed event).
   const supportResult = await pool.query(
     "SELECT id, status, amount, creator_id FROM supports WHERE tx_ref = $1",
     [txRef]
   );
 
   if ((supportResult.rowCount ?? 0) === 0) {
+    console.error("[webhook] No matching support record found for txRef:", txRef);
     res.status(200).json({ received: true, processed: false });
     return;
   }
 
   const supportRecord = supportResult.rows[0];
+  console.log("[webhook] Matched support record:", {
+    id: supportRecord.id,
+    currentStatus: supportRecord.status,
+    amount: supportRecord.amount,
+    creatorId: supportRecord.creator_id,
+  });
 
-  // Idempotency guard — already processed, nothing more to do.
   if (supportRecord.status === "successful" || supportRecord.status === "failed") {
+    console.log("[webhook] Already processed (status:", supportRecord.status, ") — skipping. Likely a duplicate/retried webhook delivery.");
     res.status(200).json({ received: true, processed: false, reason: "already processed" });
     return;
   }
 
+  console.log("[webhook] Calling verifyFlutterwaveTransaction for transactionId:", transactionId);
+
   let verified;
   try {
     verified = await verifyFlutterwaveTransaction(transactionId);
+    console.log("[webhook] Verification succeeded:", {
+      status: verified.status,
+      amount: verified.amount,
+      txRef: verified.txRef,
+      flwRef: verified.flwRef,
+    });
   } catch (err) {
-    // Flutterwave's API is unreachable/erroring — return 200 so they
-    // retry the webhook later, but don't mark anything as final yet.
-    res.status(200).json({ received: true, processed: false, reason: "verification failed" });
+    console.error("[webhook] verifyFlutterwaveTransaction threw an error for transactionId:", transactionId, "— error:", err);
+    // Non-200 so Flutterwave actually retries this webhook later.
+    // A 200 here would tell Flutterwave "delivered successfully" and
+    // they would never call us again for this event.
+    res.status(502).json({ received: true, processed: false, reason: "verification failed" });
     return;
   }
 
-  // Cross-check the verified data against what we recorded at
-  // initiation time — protects against tampered amounts.
   const amountMatches = Number(verified.amount) === Number(supportRecord.amount);
   const txRefMatches = verified.txRef === txRef;
 
+  console.log("[webhook] Cross-check results:", {
+    amountMatches,
+    txRefMatches,
+    verifiedStatus: verified.status,
+    expectedAmount: supportRecord.amount,
+    verifiedAmount: verified.amount,
+  });
+
   if (!amountMatches || !txRefMatches || verified.status !== "successful") {
+    console.error(
+      "[webhook] Cross-check FAILED — marking support as failed. amountMatches:",
+      amountMatches,
+      "txRefMatches:",
+      txRefMatches,
+      "verified.status:",
+      verified.status
+    );
+
     await pool.query(
       `UPDATE supports SET status = 'failed', updated_at = NOW() WHERE id = $1`,
       [supportRecord.id]
@@ -394,15 +429,15 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
     return;
   }
 
+  console.log("[webhook] All checks passed — marking support as successful. support id:", supportRecord.id);
+
   await pool.query(
     `UPDATE supports SET status = 'successful', flw_ref = $1, updated_at = NOW() WHERE id = $2`,
     [verified.flwRef, supportRecord.id]
   );
 
-  // TODO: trigger a notification to the creator here (email/push), and
-  // any other post-payment side effects (e.g. updating a "total raised"
-  // counter on the creator's profile).
-  // Fetch creator's email/name for the notification
+  console.log("[webhook] DB updated to successful. Fetching creator info for notification email — creatorId:", supportRecord.creator_id);
+
   const creatorResult = await pool.query(
     "SELECT email, display_name, username FROM users WHERE id = $1",
     [supportRecord.creator_id]
@@ -410,6 +445,7 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
   const creator = creatorResult.rows[0];
 
   if (creator) {
+    console.log("[webhook] Sending tip notification email to:", creator.email);
     try {
       await sendTipNotificationEmail(
         creator.email,
@@ -418,13 +454,112 @@ export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: R
         Number(supportRecord.amount),
         supportRecord.notes
       );
+      console.log("[webhook] Tip notification email sent successfully");
     } catch (err) {
-      // Don't let a failed email break the webhook response — Flutterwave
-      // will retry the webhook if you don't return 200, and you don't want
-      // an email provider hiccup to cause duplicate processing attempts
-      console.error("Failed to send tip notification email:", err);
+      console.error("[webhook] Failed to send tip notification email:", err);
     }
+  } else {
+    console.error("[webhook] No creator found for creatorId:", supportRecord.creator_id, "— skipping email");
   }
 
+  console.log("[webhook] Webhook processing complete for support id:", supportRecord.id);
   res.status(200).json({ received: true, processed: true, result: "successful" });
 });
+// export const handleFlutterwaveWebhook = asyncHandler(async (req: Request, res: Response) => {
+//   const signature = req.headers["verif-hash"];
+
+//   if (!signature || signature !== process.env.FLW_WEBHOOK_SECRET_HASH) {
+//     // Don't leak details about why — just reject.
+//     res.status(401).end();
+//     return;
+//   }
+
+//   const event = req.body;
+//   const transactionId = event?.id;
+//   const txRef = event?.txRef;
+
+//   if (!transactionId || !txRef) {
+//     // Acknowledge with 200 so Flutterwave doesn't keep retrying a
+//     // malformed payload forever, but don't process anything.
+//     res.status(200).json({ received: true, processed: false });
+//     return;
+//   }
+
+//   // Look up our own pending record first — if we don't recognize this
+//   // tx_ref at all, there's nothing to do (could be a stale/replayed event).
+//   const supportResult = await pool.query(
+//     "SELECT id, status, amount, creator_id FROM supports WHERE tx_ref = $1",
+//     [txRef]
+//   );
+
+//   if ((supportResult.rowCount ?? 0) === 0) {
+//     res.status(200).json({ received: true, processed: false });
+//     return;
+//   }
+
+//   const supportRecord = supportResult.rows[0];
+
+//   // Idempotency guard — already processed, nothing more to do.
+//   if (supportRecord.status === "successful" || supportRecord.status === "failed") {
+//     res.status(200).json({ received: true, processed: false, reason: "already processed" });
+//     return;
+//   }
+
+//   let verified;
+//   try {
+//     verified = await verifyFlutterwaveTransaction(transactionId);
+//   } catch (err) {
+//     // Flutterwave's API is unreachable/erroring — return 200 so they
+//     // retry the webhook later, but don't mark anything as final yet.
+//     res.status(200).json({ received: true, processed: false, reason: "verification failed" });
+//     return;
+//   }
+
+//   // Cross-check the verified data against what we recorded at
+//   // initiation time — protects against tampered amounts.
+//   const amountMatches = Number(verified.amount) === Number(supportRecord.amount);
+//   const txRefMatches = verified.txRef === txRef;
+
+//   if (!amountMatches || !txRefMatches || verified.status !== "successful") {
+//     await pool.query(
+//       `UPDATE supports SET status = 'failed', updated_at = NOW() WHERE id = $1`,
+//       [supportRecord.id]
+//     );
+//     res.status(200).json({ received: true, processed: true, result: "failed" });
+//     return;
+//   }
+
+//   await pool.query(
+//     `UPDATE supports SET status = 'successful', flw_ref = $1, updated_at = NOW() WHERE id = $2`,
+//     [verified.flwRef, supportRecord.id]
+//   );
+
+//   // TODO: trigger a notification to the creator here (email/push), and
+//   // any other post-payment side effects (e.g. updating a "total raised"
+//   // counter on the creator's profile).
+//   // Fetch creator's email/name for the notification
+//   const creatorResult = await pool.query(
+//     "SELECT email, display_name, username FROM users WHERE id = $1",
+//     [supportRecord.creator_id]
+//   );
+//   const creator = creatorResult.rows[0];
+
+//   if (creator) {
+//     try {
+//       await sendTipNotificationEmail(
+//         creator.email,
+//         creator.display_name || creator.username,
+//         supportRecord.fan_name,
+//         Number(supportRecord.amount),
+//         supportRecord.notes
+//       );
+//     } catch (err) {
+//       // Don't let a failed email break the webhook response — Flutterwave
+//       // will retry the webhook if you don't return 200, and you don't want
+//       // an email provider hiccup to cause duplicate processing attempts
+//       console.error("Failed to send tip notification email:", err);
+//     }
+//   }
+
+//   res.status(200).json({ received: true, processed: true, result: "successful" });
+// });

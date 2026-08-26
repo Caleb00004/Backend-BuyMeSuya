@@ -65,6 +65,15 @@ export async function createFlutterwaveSubaccount(
   const json = await response.json();
 
   if (!response.ok || json.status !== "success") {
+      // Recoverable case: a subaccount for this exact bank+account already
+      // exists on Flutterwave (likely from a previous attempt that failed
+      // to save on our side). Look it up instead of failing outright.
+      // if (json.message?.toLowerCase().includes("already exists")) {
+      //   const existing = await findExistingSubaccount(params.accountBank, params.accountNumber);
+      //     if (existing) {
+      //       return existing;
+      //     }
+      // }
     throw new Error(json.message ?? "Failed to create Flutterwave subaccount");
   }
 
@@ -222,5 +231,32 @@ export async function verifyFlutterwaveTransaction(
     txRef: json.data.tx_ref,
     flwRef: json.data.flw_ref,
     raw: json.data,
+  };
+}
+
+
+async function findExistingSubaccount(
+  accountBank: string,
+  accountNumber: string
+): Promise<FlutterwaveSubaccountResult | null> {
+  const response = await fetch(`${FLW_BASE_URL}/subaccounts`, {
+    method: "GET",
+    headers: flwHeaders(),
+  });
+
+  const json = await response.json();
+  if (!response.ok || json.status !== "success") return null;
+
+  const match = json.data.find(
+    (sub: any) => sub.account_bank === accountBank && sub.account_number === accountNumber
+  );
+
+  if (!match) return null;
+
+  return {
+    subaccountId: match.id ?? match.subaccount_id,
+    accountNumber: match.account_number,
+    bankCode: match.account_bank,
+    raw: match,
   };
 }
