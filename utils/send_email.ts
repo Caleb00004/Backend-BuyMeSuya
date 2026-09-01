@@ -20,7 +20,7 @@ async function sendEmail({ to, subject, html }: SendEmailParams): Promise<void> 
     throw new Error("RESEND_API_KEY is not configured");
   }
 
-  const fromAddress = process.env.RESEND_FROM_ADDRESS || "BuyMeSuya <onboarding@resend.dev>";
+  const fromAddress = process.env.RESEND_FROM_ADDRESS || "BuyMeSuya <buymesuya@resend.dev>";
 
   const { error } = await resend.emails.send({
     from: fromAddress,
@@ -79,7 +79,7 @@ async function sendBankDetailsUpdatedEmail(
       <p>Hey ${creatorName},</p>
       <p>Your payout bank account was just updated to an account under the name <strong>${newAccountName}</strong>.</p>
       <p>If you made this change, no action is needed.</p>
-      <p>If you did <strong>not</strong> make this change, please contact us immediately at buymesuya@gmail.com — your account may be compromised.</p>
+      <p>If you did <strong>not</strong> make this change, please contact us immediately at buymesuyasupport@gmail.com — your account may be compromised.</p>
     `,
   });
 }
