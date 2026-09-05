@@ -44,7 +44,7 @@ export async function createFlutterwaveSubaccount(
     businessMobile,
     country = "NG",
     splitType = "percentage",
-    splitValue = 0.08, //  platform keeps 8%, creator gets 92%
+    splitValue = 0.07, //  platform keeps 7%, creator gets 92%
   } = params;
 
   const response = await fetch(`${FLW_BASE_URL}/subaccounts`, {
