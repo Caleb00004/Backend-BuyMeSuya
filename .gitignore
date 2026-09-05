@@ -1,5 +1,4 @@
 # Environment variables
-.env
 .env.*.local
 
 # Logs
@@ -12,13 +11,12 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+temp_auto_push.bat
 dist
 dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -28,3 +26,6 @@ dist-ssr
 *.sw?
 ".env" 
 ".env" 
+.gitignore
+branch_structure.json
+config.bat
