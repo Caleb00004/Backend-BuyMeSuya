@@ -127,9 +127,27 @@ export const updateSupportStatus = asyncHandler(async (req: Request, res: Respon
   const supportId = Number(req.params.id);
   const { status } = req.body as { status?: string };
 
-  const allowedStatuses = ["pending", "successful", "failed", "init_failed", "expired"];
+  const allowedStatuses = ["successful", "failed", "init_failed", "expired"];
   if (!status || !allowedStatuses.includes(status)) {
     res.status(400).json({ success: false, message: "A valid status is required." });
+    return;
+  }
+
+   const existingResult = await pool.query(
+    `SELECT status FROM supports WHERE id = $1`,
+    [supportId]
+  );
+
+  if ((existingResult.rowCount ?? 0) === 0) {
+    res.status(404).json({ success: false, message: "Support not found." });
+    return;
+  }
+
+  if (existingResult.rows[0].status !== "pending") {
+    res.status(409).json({
+      success: false,
+      message: `Cannot update — support is already '${existingResult.rows[0].status}', not 'pending'.`,
+    });
     return;
   }
 
@@ -137,11 +155,6 @@ export const updateSupportStatus = asyncHandler(async (req: Request, res: Respon
     `UPDATE supports SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
     [status, supportId]
   );
-
-  if ((result.rowCount ?? 0) === 0) {
-    res.status(404).json({ success: false, message: "Support not found." });
-    return;
-  }
 
   res.json({ success: true, support: result.rows[0] });
 });
