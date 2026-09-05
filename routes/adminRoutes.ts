@@ -13,3 +13,5 @@ adminRoutes.get("/users/:id", getUserDetail);
 adminRoutes.get("/stats", getAdminStats);
 adminRoutes.delete("/supports/clear-pending", clearPendingSupports);
 adminRoutes.patch("/supports/:id/status", updateSupportStatus);
+
+export default adminRoutes;

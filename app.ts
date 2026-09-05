@@ -12,6 +12,7 @@ import cookieParser from "cookie-parser";
 import otpRoutes from "./routes/otpRoutes";
 import { v2 as cloudinary } from 'cloudinary';
 import supportRoutes from "./routes/supportRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 dotenv.config();
 
@@ -98,6 +99,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/otp", otpRoutes);
 app.use("/api/flutterwave", flutterwaveRoutes);
 app.use("/api/support", supportRoutes)
+app.use("/api/admin", adminRoutes);
 
 app.get('/healthz', async (req, res) => {
   return res.sendStatus(200);
